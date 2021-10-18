@@ -1,7 +1,28 @@
 # Changelog
 
-## [next]
+## 0.20.1
+- Fix enum parsing on release mode on android
+
+## 0.20.0
+- Fix android/kotlin build for old projects
+- Add method to clearNotification
+- Add currentPosition stream on web
+- Add seek on web
+- Add a proper Logger
+- Make setPlaybackRate signature consistent
+- Fix fatal exception on Android API < 21 in WrappedMediaPlayer.kt setAttributes
+- Add clearNotification method
+
+## 0.19.1
 - Add missing awaits for AudioCache
+- Fix Kotlin Core version to v1.6.0
+- Fix iOS warning
+- Fix README link to audio_cache.md to work on pub
+- Fix documentation referencing old class
+- Add web support for audioPlayer.getCurrentPosition
+- Add web support for audioPlayer.getDuration
+- Add web support for audioPlayer.setPlaybackRate
+- Fix local file playback in LOW_LATENCY mode on Android
 
 ## 0.19.0
 - Refactor Notifications code (small breaking changes)

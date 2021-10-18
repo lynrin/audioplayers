@@ -7,13 +7,20 @@ import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'api/release_mode.dart';
 
 class WrappedPlayer {
+  final String playerId;
+  final AudioplayersPlugin plugin;
+
   double? pausedAt;
   double currentVolume = 1.0;
+  double currentPlaybackRate = 1.0;
   ReleaseMode currentReleaseMode = ReleaseMode.RELEASE;
   String? currentUrl;
   bool isPlaying = false;
 
   AudioElement? player;
+  StreamSubscription? playerTimeUpdateSubscription;
+
+  WrappedPlayer(this.plugin, this.playerId);
 
   void setUrl(String url) {
     currentUrl = url;
@@ -30,6 +37,11 @@ class WrappedPlayer {
     player?.volume = volume;
   }
 
+  void setPlaybackRate(double rate) {
+    currentPlaybackRate = rate;
+    player?.playbackRate = rate;
+  }
+
   void recreateNode() {
     if (currentUrl == null) {
       return;
@@ -37,6 +49,16 @@ class WrappedPlayer {
     player = AudioElement(currentUrl);
     player?.loop = shouldLoop();
     player?.volume = currentVolume;
+    player?.playbackRate = currentPlaybackRate;
+    playerTimeUpdateSubscription = player?.onTimeUpdate.listen(
+      (_) => plugin.channel.invokeMethod<int>(
+        'audio.onCurrentPosition',
+        {
+          'playerId': playerId,
+          'value': (1000 * (player?.currentTime ?? 0)).round(),
+        },
+      ),
+    );
   }
 
   bool shouldLoop() => currentReleaseMode == ReleaseMode.LOOP;
@@ -49,6 +71,9 @@ class WrappedPlayer {
   void release() {
     _cancel();
     player = null;
+
+    playerTimeUpdateSubscription?.cancel();
+    playerTimeUpdateSubscription = null;
   }
 
   void start(double position) {
@@ -77,6 +102,10 @@ class WrappedPlayer {
     _cancel();
   }
 
+  void seek(int position) {
+    player?.currentTime = position / 1000.0;
+  }
+
   void _cancel() {
     isPlaying = false;
     player?.pause();
@@ -87,8 +116,12 @@ class WrappedPlayer {
 }
 
 class AudioplayersPlugin {
+  final MethodChannel channel;
+
   // players by playerId
   Map<String, WrappedPlayer> players = {};
+
+  AudioplayersPlugin(this.channel);
 
   static void registerWith(Registrar registrar) {
     final channel = MethodChannel(
@@ -97,12 +130,12 @@ class AudioplayersPlugin {
       registrar,
     );
 
-    final instance = AudioplayersPlugin();
+    final instance = AudioplayersPlugin(channel);
     channel.setMethodCallHandler(instance.handleMethodCall);
   }
 
   WrappedPlayer getOrCreatePlayer(String playerId) {
-    return players.putIfAbsent(playerId, () => WrappedPlayer());
+    return players.putIfAbsent(playerId, () => WrappedPlayer(this, playerId));
   }
 
   Future<WrappedPlayer> setUrl(String playerId, String url) async {
@@ -122,6 +155,14 @@ class AudioplayersPlugin {
 
   Future<dynamic> handleMethodCall(MethodCall call) async {
     final method = call.method;
+    switch (method) {
+      case 'changeLogLevel':
+        {
+          // no-op for now
+          return 1;
+        }
+    }
+
     final args = call.arguments as Map<dynamic, dynamic>;
     final playerId = args['playerId'] as String;
     switch (method) {
@@ -155,6 +196,14 @@ class AudioplayersPlugin {
           }
           return (position * 1000).toInt();
         }
+      case 'getDuration':
+        {
+          final duration = getOrCreatePlayer(playerId).player?.duration;
+          if (duration == null) {
+            return null;
+          }
+          return (duration * 1000).toInt();
+        }
       case 'pause':
         {
           getOrCreatePlayer(playerId).pause();
@@ -187,8 +236,18 @@ class AudioplayersPlugin {
           getOrCreatePlayer(playerId).release();
           return 1;
         }
-      case 'seek':
       case 'setPlaybackRate':
+        {
+          final rate = args['playbackRate'] as double? ?? 1.0;
+          getOrCreatePlayer(playerId).setPlaybackRate(rate);
+          return 1;
+        }
+      case 'seek':
+        {
+          final position = args['position'] as int? ?? 0;
+          getOrCreatePlayer(playerId).seek(position);
+          return 1;
+        }
       default:
         throw PlatformException(
           code: 'Unimplemented',

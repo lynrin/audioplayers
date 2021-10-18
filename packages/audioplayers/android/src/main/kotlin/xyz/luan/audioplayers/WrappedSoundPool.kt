@@ -4,13 +4,13 @@ import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaDataSource
 import android.media.SoundPool
-import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URI
 import java.net.URL
 import java.util.*
+import android.os.Build
 
 class WrappedSoundPool internal constructor(override val playerId: String) : Player() {
     companion object {
@@ -28,18 +28,25 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
         private val urlToPlayers = Collections.synchronizedMap(mutableMapOf<String, MutableList<WrappedSoundPool>>())
 
         private fun createSoundPool(): SoundPool {
-            val attrs = AudioAttributes.Builder().setLegacyStreamType(AudioManager.USE_DEFAULT_STREAM_TYPE)
-                    .setUsage(AudioAttributes.USAGE_GAME)
-                    .build()
-            return SoundPool.Builder()
-                    .setAudioAttributes(attrs)
-                    .setMaxStreams(100)
-                    .build()
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val attrs = AudioAttributes.Builder().setLegacyStreamType(AudioManager.USE_DEFAULT_STREAM_TYPE)
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .build()
+                // make a new SoundPool, allowing up to 100 streams
+                SoundPool.Builder()
+                        .setAudioAttributes(attrs)
+                        .setMaxStreams(100)
+                        .build()
+            } else {
+                // make a new SoundPool, allowing up to 100 streams
+                @Suppress("DEPRECATION")
+                SoundPool(100, AudioManager.STREAM_MUSIC, 0)
+            }
         }
 
         init {
             soundPool.setOnLoadCompleteListener { _, sampleId, _ ->
-                Log.d("WSP", "Loaded $sampleId")
+                Logger.info("Loaded $sampleId")
                 val loadingPlayer = soundIdToPlayer[sampleId]
                 if (loadingPlayer != null) {
                     soundIdToPlayer.remove(loadingPlayer.soundId)
@@ -47,10 +54,10 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
                     synchronized(urlToPlayers) {
                         val urlPlayers = urlToPlayers[loadingPlayer.url] ?: listOf<WrappedSoundPool>()
                         for (player in urlPlayers) {
-                            Log.d("WSP", "Marking $player as loaded")
+                            Logger.info("Marking $player as loaded")
                             player.loading = false
                             if (player.playing) {
-                                Log.d("WSP", "Delayed start of $player")
+                                Logger.info("Delayed start of $player")
                                 player.start()
                             }
                         }
@@ -98,7 +105,7 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
                 soundPool.unload(soundId)
                 soundIdToPlayer.remove(soundId)
                 this.soundId = null
-                Log.d("WSP", "Unloaded soundId $soundId")
+                Logger.info("unloaded soundId $soundId")
             } else {
                 // This is not the last player using the soundId, just remove it from the list.
                 playersForSoundId.remove(this)
@@ -135,7 +142,7 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
                 // Sound has already been loaded - reuse the soundId.
                 loading = originalPlayer.loading
                 soundId = originalPlayer.soundId
-                Log.d("WSP", "Reusing soundId $soundId for $url is loading=$loading $this")
+                Logger.info("Reusing soundId $soundId for $url is loading=$loading $this")
             } else {
                 // First one for this URL - load it.
                 val start = System.currentTimeMillis()
@@ -144,7 +151,7 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
                 soundId = soundPool.load(getAudioPath(url, isLocal), 1)
                 soundIdToPlayer[soundId] = this
 
-                Log.d("WSP", "time to call load() for $url: ${System.currentTimeMillis() - start} player=$this")
+                Logger.info("time to call load() for $url: ${System.currentTimeMillis() - start} player=$this")
             }
             urlPlayers.add(this)
         }
@@ -214,7 +221,7 @@ class WrappedSoundPool internal constructor(override val playerId: String) : Pla
 
     private fun getAudioPath(url: String?, isLocal: Boolean): String? {
         if (isLocal) {
-            return if (url?.startsWith("file://") == true) url!!.substring(7) else url
+            return url?.removePrefix("file://")
         }
 
         return loadTempFileFromNetwork(url).absolutePath

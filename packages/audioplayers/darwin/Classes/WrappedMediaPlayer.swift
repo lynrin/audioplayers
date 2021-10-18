@@ -133,11 +133,11 @@ class WrappedMediaPlayer {
     
     func skipForward(interval: TimeInterval) {
         guard let currentTime = getCurrentCMTime() else {
-            Logger.log("Cannot skip forward, unable to determine currentTime")
+            Logger.error("Cannot skip forward, unable to determine currentTime")
             return
         }
         guard let maxDuration = getDurationCMTime() else {
-            Logger.log("Cannot skip forward, unable to determine maxDuration")
+            Logger.error("Cannot skip forward, unable to determine maxDuration")
             return
         }
         let newTime = CMTimeAdd(currentTime, toCMTime(millis: interval * 1000))
@@ -148,7 +148,7 @@ class WrappedMediaPlayer {
     
     func skipBackward(interval: TimeInterval) {
         guard let currentTime = getCurrentCMTime() else {
-            Logger.log("Cannot skip forward, unable to determine currentTime")
+            Logger.error("Cannot skip forward, unable to determine currentTime")
             return
         }
         let newTime = CMTimeSubtract(currentTime, toCMTime(millis: interval * 1000))
@@ -159,7 +159,6 @@ class WrappedMediaPlayer {
     
     func stop() {
         pause()
-        isPlaying = false
         seek(time: toCMTime(millis: 0))
     }
     
@@ -181,7 +180,10 @@ class WrappedMediaPlayer {
         
         reference.maybeDeactivateAudioSession()
         reference.onComplete(playerId: playerId)
-        reference.notificationsHandler?.onNotificationBackgroundPlayerStateChanged(playerId: playerId, value: "completed")
+        reference.notificationsHandler?.onNotificationBackgroundPlayerStateChanged(
+            playerId: playerId,
+            value: "completed"
+        )
     }
     
     func onTimeInterval(time: CMTime) {
@@ -210,7 +212,12 @@ class WrappedMediaPlayer {
         duckAudio: Bool,
         onReady: @escaping (AVPlayer) -> Void
     ) {
-        reference.updateCategory(recordingActive: recordingActive, isNotification: isNotification, playingRoute: playingRoute, duckAudio: duckAudio)
+        reference.updateCategory(
+            recordingActive: recordingActive,
+            isNotification: isNotification,
+            playingRoute: playingRoute,
+            duckAudio: duckAudio
+        )
         let playbackStatus = player?.currentItem?.status
         
         if self.url != url || playbackStatus == .failed || playbackStatus == nil {
@@ -254,7 +261,7 @@ class WrappedMediaPlayer {
             self.onReady = onReady
             let newKeyValueObservation = playerItem.observe(\AVPlayerItem.status) { (playerItem, change) in
                 let status = playerItem.status
-                Logger.log("player status: %@ change: %@", status, change)
+                Logger.info("player status: %@ change: %@", status, change)
                 
                 // Do something with the status...
                 if status == .readyToPlay {
@@ -287,8 +294,12 @@ class WrappedMediaPlayer {
         recordingActive: Bool,
         duckAudio: Bool
     ) {
-        reference.updateCategory(recordingActive: recordingActive, isNotification: isNotification, playingRoute: playingRoute,
-        duckAudio: duckAudio)
+        reference.updateCategory(
+            recordingActive: recordingActive,
+            isNotification: isNotification,
+            playingRoute: playingRoute,
+            duckAudio: duckAudio
+        )
         
         setUrl(
             url: url,

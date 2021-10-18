@@ -20,7 +20,7 @@ class NotificationsHandler {
     private var artist: String? = nil
     private var imageUrl: String? = nil
     private var duration: Int? = nil
-    
+        
     init(reference: SwiftAudioplayersPlugin) {
         self.reference = reference
         self.initHeadlessService()
@@ -37,7 +37,10 @@ class NotificationsHandler {
         // BinaryMessenger needs to be initialized first, which is done in
         // `startHeadlessService` below.
         self.headlessEngine = headlessEngine
-        self.callbackChannel = FlutterMethodChannel(name: "xyz.luan/audioplayers_callback", binaryMessenger: headlessEngine.binaryMessenger)
+        self.callbackChannel = FlutterMethodChannel(
+            name: "xyz.luan/audioplayers_callback",
+            binaryMessenger: headlessEngine.binaryMessenger
+        )
         #endif
     }
     
@@ -83,7 +86,11 @@ class NotificationsHandler {
             
             callbackChannel.invokeMethod(
                 "audio.onNotificationBackgroundPlayerStateChanged",
-                arguments: ["playerId": playerId, "updateHandleMonitorKey": updateHandleMonitorKey as Any, "value": value]
+                arguments: [
+                    "playerId": playerId,
+                    "updateHandleMonitorKey": updateHandleMonitorKey as Any,
+                    "value": value
+                ]
             )
         }
     }
@@ -128,18 +135,32 @@ class NotificationsHandler {
         #endif
     }
     
+    func clearNotification() {
+        self.title = nil
+        self.albumTitle = nil
+        self.artist = nil
+        self.imageUrl = nil
+
+        #if os(iOS)
+        // Set both the nowPlayingInfo and infoCenter to nil so
+        // we clear all the references to the notification
+        self.infoCenter?.nowPlayingInfo = nil
+        self.infoCenter = nil
+        #endif
+    }
+    
     #if os(iOS)
     static func geneateImageFromUrl(urlString: String) -> UIImage? {
         if urlString.hasPrefix("http") {
             guard let url: URL = URL.init(string: urlString) else {
-                Logger.log("Error download image url, invalid url %@", urlString)
+                Logger.error("Error download image url, invalid url %@", urlString)
                 return nil
             }
             do {
                 let data = try Data(contentsOf: url)
                 return UIImage.init(data: data)
             } catch {
-                Logger.log("Error download image url %@", error)
+                Logger.error("Error download image url %@", error)
                 return nil
             }
         } else {
@@ -164,29 +185,32 @@ class NotificationsHandler {
             MPNowPlayingInfoPropertyPlaybackRate: Float(playbackRate)
         ]
         
-        Logger.log("Updating playing info...")
+        Logger.info("Updating playing info...")
         
         // fetch notification image in async fashion to avoid freezing UI
         DispatchQueue.global().async() { [weak self] in
             if let imageUrl = self?.imageUrl {
-                let artworkImage: UIImage? = NotificationsHandler.geneateImageFromUrl(urlString: imageUrl)
+                let artworkImage = NotificationsHandler.geneateImageFromUrl(urlString: imageUrl)
                 if let artworkImage = artworkImage {
                     if #available(iOS 10, *) {
-                    let albumArt: MPMediaItemArtwork = MPMediaItemArtwork.init(boundsSize: artworkImage.size, requestHandler: { (size) -> UIImage in
-                        return artworkImage
-                })
+                        let albumArt = MPMediaItemArtwork.init(
+                            boundsSize: artworkImage.size,
+                            requestHandler: { (size) -> UIImage in
+                                return artworkImage
+                            }
+                        )
                         playingInfo[MPMediaItemPropertyArtwork] = albumArt
                     } else {
-                        let albumArt: MPMediaItemArtwork = MPMediaItemArtwork.init(image: artworkImage)
+                        let albumArt = MPMediaItemArtwork.init(image: artworkImage)
                         playingInfo[MPMediaItemPropertyArtwork] = albumArt
                     }
-                    Logger.log("Will add custom album art")
+                    Logger.info("Will add custom album art")
                 }
             }
             
             if let infoCenter = self?.infoCenter {
                 let filteredMap = playingInfo.filter { $0.value != nil }.mapValues { $0! }
-                Logger.log("Setting playing info: %@", filteredMap)
+                Logger.info("Setting playing info: %@", filteredMap)
                 infoCenter.nowPlayingInfo = filteredMap
             }
         }
@@ -260,7 +284,7 @@ class NotificationsHandler {
     
     func skipBackwardEvent(skipEvent: MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus {
         let interval = (skipEvent as! MPSkipIntervalCommandEvent).interval
-        Logger.log("Skip backward by %f", interval)
+        Logger.info("Skip backward by %f", interval)
         
         guard let player = reference.lastPlayer() else {
             return MPRemoteCommandHandlerStatus.commandFailed
@@ -272,7 +296,7 @@ class NotificationsHandler {
     
     func skipForwardEvent(skipEvent: MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus {
         let interval = (skipEvent as! MPSkipIntervalCommandEvent).interval
-        Logger.log("Skip forward by %f", interval)
+        Logger.info("Skip forward by %f", interval)
         
         guard let player = reference.lastPlayer() else {
             return MPRemoteCommandHandlerStatus.commandFailed
@@ -331,7 +355,7 @@ class NotificationsHandler {
         }
         
         let positionTime = (changePositionEvent as! MPChangePlaybackPositionCommandEvent).positionTime
-        Logger.log("changePlaybackPosition to %f", positionTime)
+        Logger.info("changePlaybackPosition to %f", positionTime)
         let newTime = toCMTime(millis: positionTime)
         player.seek(time: newTime)
         return MPRemoteCommandHandlerStatus.success
